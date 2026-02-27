@@ -70,26 +70,26 @@ See [`examples/simple.ts`](examples/simple.ts) for a full Node.js example.
 
 ### `encode(rgba, width, height): Uint8Array`
 
-| Parameter | Type | Description |
-| :-------- | :--- | :---------- |
-| `rgba` | `Uint8ClampedArray \| Uint8Array` | Raw RGBA pixel data (4 bytes per pixel) |
-| `width` | `number` | Image width in pixels |
-| `height` | `number` | Image height in pixels |
+| Parameter | Type                              | Description                             |
+| :-------- | :-------------------------------- | :-------------------------------------- |
+| `rgba`    | `Uint8ClampedArray \| Uint8Array` | Raw RGBA pixel data (4 bytes per pixel) |
+| `width`   | `number`                          | Image width in pixels                   |
+| `height`  | `number`                          | Image height in pixels                  |
 
 Returns a `Uint8Array` of exactly 16 bytes.
 
 ### `decode(hash): DecodedImage`
 
-| Parameter | Type | Description |
-| :-------- | :--- | :---------- |
-| `hash` | `Uint8Array` | 16-byte SplatHash |
+| Parameter | Type         | Description       |
+| :-------- | :----------- | :---------------- |
+| `hash`    | `Uint8Array` | 16-byte SplatHash |
 
 Returns a `DecodedImage`:
 
 ```typescript
 interface DecodedImage {
-  width: number;          // always 32
-  height: number;         // always 32
+  width: number; // always 32
+  height: number; // always 32
   rgba: Uint8ClampedArray; // 32 * 32 * 4 bytes
 }
 ```
