@@ -1,3 +1,10 @@
+## [1.0.3](https://github.com/junevm/splathash/compare/v1.0.2...v1.0.3) (2026-02-27)
+
+
+### Bug Fixes
+
+* optimized encode and decode for performance, now splathash is faster than before ([6fcfec4](https://github.com/junevm/splathash/commit/6fcfec46616ea3d12707aeafbda9a73a0c530472))
+
 ## [1.0.2](https://github.com/junevm/splathash/compare/v1.0.1...v1.0.2) (2026-02-27)
 
 
