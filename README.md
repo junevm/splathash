@@ -40,14 +40,14 @@ The image below shows SplatHash, ThumbHash, and BlurHash reconstructions side by
 
 ## Implementations
 
-SplatHash has a **first-class Go implementation** (the reference) and **second-class implementations** for TypeScript (Node and browser) and Python. All implementations are tested against the same image assets and produce identical hashes.
+SplatHash has a **reference implementation in Go** and **ports** for TypeScript (Node and browser) and Python. All implementations are tested against the same image assets and produce identical hashes.
 
-| Language                 | Location    | Status       | Notes                                |
-| :----------------------- | :---------- | :----------- | :----------------------------------- |
-| **Go**                   | `src/go/`   | First-class  | Reference implementation             |
-| **TypeScript (Node)**    | `src/ts/`   | Second-class | Isomorphic, also runs in browsers    |
-| **TypeScript (Browser)** | `src/ts/`   | Second-class | Same package, no extra config needed |
-| **Python**               | `src/py/`   | Second-class | Requires Pillow                      |
+| Language                 | Location    | Status    | Notes                                |
+| :----------------------- | :---------- | :-------- | :----------------------------------- |
+| **Go**                   | `src/go/`   | Reference | Defines correct behavior             |
+| **TypeScript (Node)**    | `src/ts/`   | Port      | Isomorphic, also runs in browsers    |
+| **TypeScript (Browser)** | `src/ts/`   | Port      | Same package, no extra config needed |
+| **Python**               | `src/py/`   | Port      | Requires Pillow                      |
 
 ## Installation
 

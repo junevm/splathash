@@ -4,9 +4,9 @@
 
 SplatHash is polyglot by design. One algorithm, multiple implementations, zero divergence.
 
-- **Go (`go/`)** — First-class reference implementation. Algorithm changes start here. When in doubt about correct behavior, the Go output wins.
-- **TypeScript (`ts/`)** — Second-class. Isomorphic: same code runs in Node.js and browsers. Must produce bit-identical output to Go.
-- **Python (`py/`)** — Second-class. Requires Pillow for image loading. Must produce bit-identical output to Go.
+- **Go (`go/`)** — Reference implementation. Algorithm changes start here. When in doubt about correct behavior, the Go output wins.
+- **TypeScript (`ts/`)** — Port. Isomorphic: same code runs in Node.js and browsers. Must produce bit-identical output to Go.
+- **Python (`py/`)** — Port. Requires Pillow for image loading. Must produce bit-identical output to Go.
 
 ## Adding a New Language
 
