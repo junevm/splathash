@@ -86,7 +86,6 @@ const result = decode(hash);
 See [`src/ts/README.md`](./src/ts/README.md) and `src/ts/examples/simple.ts` for full examples using `sharp`.
 
 ### TypeScript / Browser
-
 Same package. Pass raw RGBA data from a `<canvas>` context:
 
 ```typescript
