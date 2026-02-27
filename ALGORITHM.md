@@ -51,7 +51,14 @@ The algorithm works on a 32x32 grid, not the full image. This is a deliberate tr
 
 The full image might be 4000x3000. Working at full resolution would be slow and unnecessary — the output is a blurry placeholder anyway. 32x32 is enough to capture the structural layout of colors.
 
-Each of the 32x32 cells gets the **area-averaged color** of the source pixels that map to it. This is a box filter — better than nearest-neighbor for capturing overall color correctly.
+Each of the 32x32 output cells samples **one pixel from the center of the corresponding source region**. The source coordinate for output cell (x, y) is:
+
+```
+sx = (x * srcW + srcW/2) / W    (integer division)
+sy = (y * srcH + srcH/2) / H
+```
+
+This is point sampling at cell centers. It reduces pixel reads from O(srcW × srcH) to exactly O(W × H) = 1024, giving a ~3000× speedup on 4K images with no visible quality difference at 32×32 output resolution.
 
 ---
 
@@ -65,29 +72,64 @@ The mean is stored as 16 bits: 6 bits for L (lightness), 5 bits for a, 5 bits fo
 
 ---
 
-## Step 3: Greedy Basis Search (Finding the Splats)
+## Step 3: Sequential Matching Pursuit (Finding the Splats)
 
-With the mean subtracted, the algorithm has a **residual** — the difference between the original grid and the current approximation (which is just the mean color everywhere).
+With the mean subtracted, the algorithm has a **residual** — the difference between the original grid and the current approximation (just the mean color everywhere).
 
-Now it needs to find 6 Splats that best explain this residual. It does this greedily, one at a time.
+The goal is to find 6 Splat positions and sizes that best explain this residual. SplatHash uses **sequential matching pursuit**: find one Splat at a time, subtract its contribution from the residual, then search for the next.
 
-For each candidate Splat position and size:
+### Why residual subtraction matters
 
-1. Compute the Gaussian activation at every grid pixel (how much this Splat affects each pixel)
-2. Project the residual onto this Gaussian (a dot product)
-3. Score how much variance this Splat would explain
+Without subtraction, all 6 Splats compete for the same high-energy region and cluster together. With subtraction, each Splat is placed where the remaining unexplained variance is highest — producing diverse, non-redundant placements. This is the founding property of matching pursuit algorithms.
 
-The Splat with the highest score is chosen, added to the reconstruction, and the residual is updated. Then find the next best Splat. Six times total.
+### Per-iteration search: three phases
 
-**Why greedy?** Finding all 6 Splats simultaneously would require searching an enormous space. Greedy search is fast and finds good (not globally optimal) positions.
+Each of the 6 iterations runs the following search on the **current** residual:
 
-**Search details:**
+**Phase 1 — Full separable correlation for all four sigmas**
 
-- Positions are sampled at stride 2 (every other pixel) for speed
-- Four Sigma (blob size) levels are tried: 0.025, 0.1, 0.2, 0.35 (as fractions of image width)
-- The first 3 Splats found become Baryons (full-color), the next 3 become Leptons (luma-only)
+For each of the 4 sigma values, compute a full per-pixel correlation map using separable 1D passes:
 
-The greedy coloring at this stage is temporary. The real colors are computed in step 4.
+1. Horizontal pass: for each pixel (y, x), accumulate kernel-weighted neighbors in the x direction using **zero-padding** (neighbors outside the image boundary contribute zero, not clamped values):
+
+   ```
+   tmp[y][x] = k[0]*res[y][x] + Σ_{d=1..hw} k[d] * (res[y][x-d] if x-d≥0 else 0)
+                                             + k[d] * (res[y][x+d] if x+d<W else 0)
+   ```
+
+2. Vertical pass: apply the same kernel in the y direction to the horizontal result, again with zero-padding.
+
+Zero-padding is critical. Clamped padding (repeating boundary pixels) inflates scores at image edges by up to hw² times, causing all Splats to cluster at corners. Zero-padding correctly depresses boundary scores since there are fewer real neighbors contributing.
+
+This is O(N × hw) per sigma per iteration. For the widest sigma (σ=0.35, hw=31 on a 32×32 grid), the pass covers the entire image but is still separable and fast.
+
+**Phase 2 — Score each pixel and pick the best**
+
+For each pixel, the score (over all 4 sigma maps) is:
+
+- **Baryons** (first 3 iterations): `score = (corrL² + corrA² + corrB²) / gaussPow`
+
+  Baryons are full-color Splats, so the position search considers all three color channels. `gaussPow = (Σ k[d]²)²` is the self-correlation of the 2D Gaussian kernel, serving as the normalization factor.
+
+- **Leptons** (last 3 iterations): `score = corrL² / gaussPow`
+
+  Leptons are luma-only Splats, so only the L-channel correlation matters for positioning.
+
+Each pixel keeps the best-scoring sigma across all 4 sigma maps. The pixel with the globally highest score is the new Splat's center.
+
+**Phase 3 — Compute weights and subtract**
+
+At the winner position, re-compute exact L, A, B dot-products using the winning kernel via a direct O(hw²) pass (also zero-padded). Divide by `gaussPow` to get the per-channel weights.
+
+Add the Splat to the list (first 3 are Baryons, next 3 are Leptons). Then subtract its Gaussian footprint from all three residual channels:
+
+```
+res[y][x] -= weight * gaussLUT[si][dx² + dy²]
+```
+
+This ensures the next iteration searches for variance that the current Splat didn't explain.
+
+The per-iteration greedy weights are approximate and temporary. The final colors are globally re-optimized in step 4.
 
 ---
 
@@ -188,16 +230,16 @@ When porting to a new language, the following must be exact:
 
 1. **srgbToOklab and oklabToSrgb**: Use the exact coefficients listed in the source. Floating-point differences in these transforms will produce different hashes.
 
-2. **Area averaging in imageToOklabGrid**: The grid mapping must match exactly. The floor-based integer bounds `x0 = floor(x * srcW / w)`, `x1 = floor((x+1) * srcW / w)` must be used consistently.
+2. **Point sampling in imageToOklabGrid**: The source pixel for output cell (x, y) is `sx = (x*srcW + srcW/2) / W` (integer division), same for y. This must match exactly across all implementations or hashes will differ.
 
-3. **Quantization and dequantization**: The `quant` function rounds to nearest (`round(norm * steps)`), not truncates. The `unquant` function divides by `steps` (not `steps - 1` or `steps + 1`).
+3. **Quantization and dequantization**: The `quant` function uses `floor(norm * steps + 0.5)` (round-half-up), not plain truncation. In Go this is `int(norm * steps + 0.5)`; in TypeScript use `Math.floor(norm * steps + 0.5)`, not `Math.round(norm * steps + 0.5)` (the latter adds 0.5 twice). The `unquant` function divides by `steps` (not `steps - 1` or `steps + 1`).
 
 4. **packMean**: L uses `floor(l * 63.5)`, a and b use `floor(((v + 0.2) / 0.4) * 31.5)`.
 
 5. **Bit stream**: Write and read MSB-first within each byte. The Go/TS reference implementations include `BitWriter`/`BitReader` structs that must be replicated precisely.
 
-6. **Sigma lookup**: When encoding, find the nearest sigma table entry by absolute distance and use its index.
+6. **LUT-based color conversions**: The implementations use precomputed look-up tables for `cbrt` (1025 entries over [0,1]) and `linToSrgb` (1024 entries over [0,1]) rather than calling `Math.cbrt`/`Math.pow` per pixel. These LUTs must be populated identically (same size, same rounding) and looked up the same way (`round(x * N)`) for cross-language hash parity. Calling the math functions directly introduces platform-specific floating-point differences.
 
-7. **Greedy search stride**: The position search uses stride 2, scanning at `x = 0, 2, 4, ...` and `y = 0, 2, 4, ...`. This must match or hashes will differ.
+7. **Sigma lookup**: When encoding, find the nearest sigma table entry by absolute distance and use its index.
 
 Test your implementation against the shared `assets/` test images by comparing hex-encoded hashes with the Go reference implementation.

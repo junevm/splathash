@@ -1,9 +1,14 @@
 # SplatHash — Python implementation
 #
-# Copyright (c) 2025 dragonrider
-# MIT License — see ../LICENSE
+# Encodes any image into 16 bytes and reconstructs a 32x32 preview.
+# An image is decomposed into a background color (Mean) and six Gaussian blobs (Splats):
+#   - 3 Baryons: full-color Splats for dominant features
+#   - 3 Leptons: luma-only Splats for texture and detail
 #
-# Algorithmically identical to the Go reference implementation.
+# Splat positions are found by separable 2-D Gaussian correlation (matching pursuit).
+# Ridge Regression then refines all weights together. All computation is in Oklab.
+# The hash fits into exactly 128 bits.
+#
 # Requires: Pillow (pip install Pillow)
 #
 # API:
@@ -14,7 +19,6 @@
 from __future__ import annotations
 
 import math
-import struct
 from typing import NamedTuple, Union
 
 try:
@@ -29,6 +33,7 @@ __all__ = ["encode", "encode_raw", "decode"]
 TARGET_SIZE  = 32
 RIDGE_LAMBDA = 0.001
 SIGMA_TABLE  = [0.025, 0.1, 0.2, 0.35]
+GAUSS_TABLE_MAX = 1923  # max dsq = 31² + 31² = 1922 for a 32×32 grid
 
 
 class _Splat(NamedTuple):
@@ -39,6 +44,115 @@ class _Splat(NamedTuple):
     a:        float
     b:        float
     is_lepton: bool
+
+
+# ---------------------------------------------------------------------------
+# Package-level precomputed look-up tables (same as Go/TS for cross-language parity)
+# ---------------------------------------------------------------------------
+
+# gaussLUT[si][dsq] = exp(-dsq / (2·σᵢ²·W²)), zeroed below 1e-7
+_gauss_lut: list[list[float]] = [[] for _ in range(4)]
+
+# gaussKernel1D[si] = [k(0), k(1), ..., k(hw)] (half-kernel, symmetric)
+_gauss_kernel_1d: list[list[float]] = [[] for _ in range(4)]
+
+# half-width of the non-zero region for each sigma
+_kernel_hw: list[int] = [0, 0, 0, 0]
+
+# gaussPow[si] = (Σ_{d=-hw}^{hw} k[d]²)²
+_gauss_pow: list[float] = [0.0, 0.0, 0.0, 0.0]
+
+# linToSrgbLUT[i] = sRGB-gamma(i / 1023) for i = 0 .. 1023.
+_lin_to_srgb_lut: list[float] = []
+
+# srgbLinLUT[v] = linear-light(v / 255) for v = 0 .. 255.
+_srgb_lin_lut: list[float] = []
+
+# cbrtLUT[i] = cbrt(i / 1024) for i = 0 .. 1024.
+_cbrt_lut: list[float] = []
+
+
+def _init_luts() -> None:
+    W  = TARGET_SIZE
+    W2 = W * W
+
+    for si, sigma in enumerate(SIGMA_TABLE):
+        scale2 = 2.0 * sigma * sigma * W2
+        lut: list[float] = []
+        for dsq in range(GAUSS_TABLE_MAX):
+            v = math.exp(-dsq / scale2)
+            if v < 1e-7:
+                v = 0.0
+            lut.append(v)
+        _gauss_lut[si] = lut
+
+        # Build 1-D half-kernel.
+        hw = 0
+        for d in range(W):
+            if lut[d * d] < 1e-7:
+                break
+            hw = d
+        _kernel_hw[si] = hw
+        kern = [lut[d * d] for d in range(hw + 1)]
+        _gauss_kernel_1d[si] = kern
+
+        # Normalization factor gg = (Σ_d k[d]²)²
+        sum1d = 0.0
+        for d in range(-hw, hw + 1):
+            v = kern[abs(d)]
+            sum1d += v * v
+        _gauss_pow[si] = sum1d * sum1d
+
+    # sRGB → linear LUT (8-bit input).
+    for v in range(256):
+        c = v / 255.0
+        _srgb_lin_lut.append(c / 12.92 if c <= 0.04045
+                             else ((c + 0.055) / 1.055) ** 2.4)
+
+    # linear → sRGB gamma LUT (1024 steps over [0, 1]).
+    def _lin_to_srgb_scalar(c: float) -> float:
+        if c <= 0.0031308:
+            return 12.92 * c
+        if c < 0:
+            return 0.0
+        return 1.055 * (c ** (1.0 / 2.4)) - 0.055
+
+    for i in range(1024):
+        _lin_to_srgb_lut.append(_lin_to_srgb_scalar(i / 1023.0))
+
+    # Cube-root LUT for [0, 1].
+    for i in range(1025):
+        _cbrt_lut.append((i / 1024.0) ** (1.0 / 3.0))
+
+
+_init_luts()
+
+
+def _cbrt_fast(x: float) -> float:
+    if x <= 0:
+        return 0.0
+    if x >= 1:
+        return _cbrt_lut[1024]
+    return _cbrt_lut[int(x * 1024.0 + 0.5)]
+
+
+def _lin_to_srgb_fast(c: float) -> float:
+    if c <= 0:
+        return 0.0
+    if c >= 1:
+        return 1.0
+    return _lin_to_srgb_lut[int(c * 1023.0 + 0.5)]
+
+
+def _sigma_idx(sigma: float) -> int:
+    best_i = 0
+    best_d = abs(SIGMA_TABLE[0] - sigma)
+    for i in range(1, 4):
+        d = abs(SIGMA_TABLE[i] - sigma)
+        if d < best_d:
+            best_d = d
+            best_i = i
+    return best_i
 
 
 # ---------------------------------------------------------------------------
@@ -67,50 +181,32 @@ def encode(source) -> bytes:
 
 def encode_raw(rgba: bytes, width: int, height: int) -> bytes:
     """Encode an image from raw RGBA bytes to a 16-byte SplatHash."""
-    # 1. Downsample and convert to Oklab
-    grid = _image_to_oklab_grid(rgba, width, height, TARGET_SIZE, TARGET_SIZE)
+    W, H = TARGET_SIZE, TARGET_SIZE
 
-    # 2. Compute mean
-    n = TARGET_SIZE * TARGET_SIZE
+    # 1. Downsample and convert to Oklab.
+    grid = _image_to_oklab_grid(rgba, width, height, W, H)
+
+    # 2. Compute mean and quantise immediately.
+    n = W * H
     mean_l = sum(grid[i * 3]     for i in range(n)) / n
     mean_a = sum(grid[i * 3 + 1] for i in range(n)) / n
     mean_b = sum(grid[i * 3 + 2] for i in range(n)) / n
-
-    # Quantize mean immediately so the solver works against the stored value
     packed_mean = _pack_mean(mean_l, mean_a, mean_b)
     mean_l, mean_a, mean_b = _unpack_mean(packed_mean)
 
-    # Residuals
-    target_l = [grid[i * 3]     - mean_l for i in range(n)]
-    target_a = [grid[i * 3 + 1] - mean_a for i in range(n)]
-    target_b = [grid[i * 3 + 2] - mean_b for i in range(n)]
+    # 3. Initial residuals.
+    res_l = [grid[i * 3]     - mean_l for i in range(n)]
+    res_a = [grid[i * 3 + 1] - mean_a for i in range(n)]
+    res_b = [grid[i * 3 + 2] - mean_b for i in range(n)]
 
-    # 3. Greedy basis search
-    basis: list[_Splat] = []
-    current_recon = [0.0] * (TARGET_SIZE * TARGET_SIZE * 3)
+    # 4. Greedy matching pursuit using separable Gaussian correlation.
+    basis = _find_all_splats(res_l, res_a, res_b, W, H, 6)
 
-    for i in range(6):
-        candidate, gain = _find_best_splat(
-            grid, current_recon, mean_l, mean_a, mean_b,
-            TARGET_SIZE, TARGET_SIZE
-        )
-        if gain < 0.00001:
-            break
-        is_lepton = (i >= 3)
-        splat = _Splat(
-            x=candidate.x, y=candidate.y, sigma=candidate.sigma,
-            l=candidate.l, a=candidate.a, b=candidate.b,
-            is_lepton=is_lepton
-        )
-        basis.append(splat)
-        _add_splat_to_grid(current_recon, splat, TARGET_SIZE, TARGET_SIZE)
-
-    # 4. Global Ridge Regression
+    # 5. Global Ridge Regression over all splat weights simultaneously.
     if basis:
-        basis = _solve_v4_weights(basis, target_l, target_a, target_b,
-                                  TARGET_SIZE, TARGET_SIZE)
+        basis = _solve_v4_weights(basis, grid, mean_l, mean_a, mean_b, W, H)
 
-    # 5. Pack
+    # 6. Pack.
     return _pack_v4(packed_mean, basis)
 
 
@@ -123,17 +219,17 @@ def decode(hash_bytes: bytes) -> bytes:
     w, h = 32, 32
     grid = [0.0] * (w * h * 3)
 
-    # Fill background
+    # Fill background.
     for i in range(w * h):
         grid[i * 3]     = mean_l
         grid[i * 3 + 1] = mean_a
         grid[i * 3 + 2] = mean_b
 
-    # Composite splats
+    # Composite splats.
     for s in splats:
         _add_splat_to_grid(grid, s, w, h)
 
-    # Convert to RGBA bytes
+    # Convert to RGBA bytes.
     out = bytearray(w * h * 4)
     for y in range(h):
         for x in range(w):
@@ -151,26 +247,32 @@ def decode(hash_bytes: bytes) -> bytes:
 # Solver
 # ---------------------------------------------------------------------------
 
-def _solve_v4_weights(basis, target_l, target_a, target_b, w, h):
-    n_total   = len(basis)
-    n_baryons = sum(1 for s in basis if not s.is_lepton)
+def _solve_v4_weights(basis, grid, mean_l, mean_a, mean_b, w, h):
+    n_total = len(basis)
+    M = w * h
 
-    # Precompute Gaussian activation maps
+    # Reconstruct full target vectors (grid − mean).
+    t_l = [grid[i * 3]     - mean_l for i in range(M)]
+    t_a = [grid[i * 3 + 1] - mean_a for i in range(M)]
+    t_b = [grid[i * 3 + 2] - mean_b for i in range(M)]
+
+    # Precompute activation maps.
     activations = [_compute_basis_map(s, w, h) for s in basis]
 
-    # Solve each channel
-    x_l = _solve_channel(activations,            target_l, n_total,   RIDGE_LAMBDA)
-    x_a = _solve_channel(activations[:n_baryons], target_a, n_baryons, RIDGE_LAMBDA)
-    x_b = _solve_channel(activations[:n_baryons], target_b, n_baryons, RIDGE_LAMBDA)
+    # Solve L for all splats. A and B only for Baryons (first up-to-3).
+    n_baryons = min(n_total, 3)
+    x_l = _solve_channel(activations,            t_l, n_total,   RIDGE_LAMBDA)
+    x_a = _solve_channel(activations[:n_baryons], t_a, n_baryons, RIDGE_LAMBDA)
+    x_b = _solve_channel(activations[:n_baryons], t_b, n_baryons, RIDGE_LAMBDA)
 
     out = []
     for i, s in enumerate(basis):
         out.append(_Splat(
             x=s.x, y=s.y, sigma=s.sigma,
             l=x_l[i],
-            a=(x_a[i] if i < n_baryons else 0.0),
-            b=(x_b[i] if i < n_baryons else 0.0),
-            is_lepton=s.is_lepton
+            a=x_a[i] if i < 3 else 0.0,
+            b=x_b[i] if i < 3 else 0.0,
+            is_lepton=s.is_lepton,
         ))
     return out
 
@@ -179,27 +281,23 @@ def _solve_channel(activations, target, n, lam):
     if n == 0:
         return []
     m = len(target)
-
-    # Build ATA (n x n) and ATb (n)
     ata = [0.0] * (n * n)
     atb = [0.0] * n
 
     for i in range(n):
+        ai = activations[i]
         for j in range(i, n):
             s = 0.0
-            ai = activations[i]
             aj = activations[j]
             for p in range(m):
                 s += ai[p] * aj[p]
             ata[i * n + j] = s
             ata[j * n + i] = s
         s = 0.0
-        ai = activations[i]
         for p in range(m):
             s += ai[p] * target[p]
         atb[i] = s
 
-    # Ridge regularization
     for i in range(n):
         ata[i * n + i] += lam
 
@@ -224,130 +322,219 @@ def _solve_linear_system(mat, vec, n):
     return x
 
 
+def _compute_basis_map(s: _Splat, w: int, h: int) -> list[float]:
+    out = [0.0] * (w * h)
+    si  = _sigma_idx(s.sigma)
+    hw  = _kernel_hw[si]
+    lut = _gauss_lut[si]
+    cx  = int(s.x * w)
+    cy  = int(s.y * h)
+    y0  = _clampi(cy - hw, 0, h - 1)
+    y1  = _clampi(cy + hw, 0, h - 1)
+    x0  = _clampi(cx - hw, 0, w - 1)
+    x1  = _clampi(cx + hw, 0, w - 1)
+    for y in range(y0, y1 + 1):
+        dy = y - cy
+        row_base = y * w
+        for x in range(x0, x1 + 1):
+            dx  = x - cx
+            dsq = dx * dx + dy * dy
+            if dsq < GAUSS_TABLE_MAX:
+                out[row_base + x] = lut[dsq]
+    return out
+
+
 # ---------------------------------------------------------------------------
-# Greedy search
+# Greedy search: sequential matching pursuit
 # ---------------------------------------------------------------------------
 
-def _find_best_splat(grid, recon, m_l, m_a, m_b, w, h):
-    n = w * h
-    res_l = [grid[i * 3]     - m_l - recon[i * 3]     for i in range(n)]
-    res_a = [grid[i * 3 + 1] - m_a - recon[i * 3 + 1] for i in range(n)]
-    res_b = [grid[i * 3 + 2] - m_b - recon[i * 3 + 2] for i in range(n)]
+def _find_all_splats(res_l, res_a, res_b, w, h, n_splats):
+    splats: list[_Splat] = []
 
-    best_splat = _Splat(0.0, 0.0, 0.1, 0.0, 0.0, 0.0, False)
-    max_score  = -1.0
+    # Pre-allocate scratch buffers.
+    N = w * h
+    tmp_l    = [0.0] * N
+    tmp_a    = [0.0] * N
+    tmp_b    = [0.0] * N
+    score_map = [-1.0] * N
+    sigma_map = [-1]   * N
 
-    step = 2
-    for y in range(0, h, step):
-        for x in range(0, w, step):
-            xf = x / w
-            yf = y / h
-            for sigma in SIGMA_TABLE:
-                rad  = int(sigma * w * 3.5)
-                y0   = _clampi(y - rad, 0, h - 1)
-                y1   = _clampi(y + rad, 0, h - 1)
-                x0   = _clampi(x - rad, 0, w - 1)
-                x1   = _clampi(x + rad, 0, w - 1)
-                dot_l = dot_a = dot_b = dot_g = 0.0
+    while len(splats) < n_splats:
+        is_baryon = len(splats) < 3
 
-                for sy in range(y0, y1 + 1):
-                    dy      = sy / h - yf
-                    row_base = sy * w
-                    for sx in range(x0, x1 + 1):
-                        dx      = sx / w - xf
-                        dist_sq = dx * dx + dy * dy
-                        weight  = math.exp(-dist_sq / (2 * sigma * sigma))
-                        idx     = row_base + sx
-                        dot_l  += weight * res_l[idx]
-                        dot_a  += weight * res_a[idx]
-                        dot_b  += weight * res_b[idx]
-                        dot_g  += weight * weight
+        # ── 1. Build per-pixel score map over all 4 sigmas ──────────────────
+        for i in range(N):
+            score_map[i] = -1.0
+            sigma_map[i] = -1
 
-                if dot_g < 1e-9:
+        for si in range(4):
+            kern   = _gauss_kernel_1d[si]
+            hw     = _kernel_hw[si]
+            inv_gg = 1.0 / _gauss_pow[si]
+
+            # ── Horizontal pass (zero-padding) ─────────────────────────────
+            for y in range(h):
+                row_off = y * w
+                for x in range(w):
+                    sL = kern[0] * res_l[row_off + x]
+                    sA = kern[0] * res_a[row_off + x]
+                    sB = kern[0] * res_b[row_off + x]
+                    for d in range(1, hw + 1):
+                        k  = kern[d]
+                        xl = x - d
+                        if xl >= 0:
+                            sL += k * res_l[row_off + xl]
+                            if is_baryon:
+                                sA += k * res_a[row_off + xl]
+                                sB += k * res_b[row_off + xl]
+                        xr = x + d
+                        if xr < w:
+                            sL += k * res_l[row_off + xr]
+                            if is_baryon:
+                                sA += k * res_a[row_off + xr]
+                                sB += k * res_b[row_off + xr]
+                    tmp_l[row_off + x] = sL
+                    if is_baryon:
+                        tmp_a[row_off + x] = sA
+                        tmp_b[row_off + x] = sB
+
+            # ── Vertical pass (zero-padding) + score update ─────────────────
+            for x in range(w):
+                for y in range(h):
+                    sL = kern[0] * tmp_l[y * w + x]
+                    sA = kern[0] * tmp_a[y * w + x]
+                    sB = kern[0] * tmp_b[y * w + x]
+                    for d in range(1, hw + 1):
+                        k  = kern[d]
+                        yu = y - d
+                        if yu >= 0:
+                            sL += k * tmp_l[yu * w + x]
+                            if is_baryon:
+                                sA += k * tmp_a[yu * w + x]
+                                sB += k * tmp_b[yu * w + x]
+                        yd = y + d
+                        if yd < h:
+                            sL += k * tmp_l[yd * w + x]
+                            if is_baryon:
+                                sA += k * tmp_a[yd * w + x]
+                                sB += k * tmp_b[yd * w + x]
+                    i = y * w + x
+                    score = ((sL * sL + sA * sA + sB * sB) * inv_gg
+                             if is_baryon else sL * sL * inv_gg)
+                    if score > score_map[i]:
+                        score_map[i] = score
+                        sigma_map[i] = si
+
+        # ── 2. Find single best pixel ────────────────────────────────────────
+        best_score = -1.0
+        best_idx   = -1
+        for i in range(N):
+            if score_map[i] > best_score:
+                best_score = score_map[i]
+                best_idx   = i
+        if best_idx < 0 or best_score < 1e-9:
+            break
+
+        bx   = best_idx % w
+        by   = best_idx // w
+        si   = sigma_map[best_idx]
+        kern = _gauss_kernel_1d[si]
+        hw   = _kernel_hw[si]
+        gg   = _gauss_pow[si]
+
+        # ── 3. Compute L, A, B dot-products at winner (zero-padding) ─────────
+        dot_l = dot_a = dot_b = 0.0
+        for dy in range(-hw, hw + 1):
+            yy = by + dy
+            if yy < 0 or yy >= h:
+                continue
+            ky = kern[abs(dy)]
+            for dx in range(-hw, hw + 1):
+                xx = bx + dx
+                if xx < 0 or xx >= w:
                     continue
-                score = (dot_l * dot_l + dot_a * dot_a + dot_b * dot_b) / dot_g
-                if score > max_score:
-                    max_score  = score
-                    best_splat = _Splat(
-                        x=xf, y=yf, sigma=sigma,
-                        l=dot_l / dot_g, a=dot_a / dot_g, b=dot_b / dot_g,
-                        is_lepton=False
-                    )
+                kv  = ky * kern[abs(dx)]
+                off = yy * w + xx
+                dot_l += kv * res_l[off]
+                dot_a += kv * res_a[off]
+                dot_b += kv * res_b[off]
 
-    return best_splat, max_score
+        inv_gg = 1.0 / gg
+        splat  = _Splat(
+            x=bx / w, y=by / h, sigma=SIGMA_TABLE[si],
+            l=dot_l * inv_gg, a=dot_a * inv_gg, b=dot_b * inv_gg,
+            is_lepton=not is_baryon,
+        )
+        splats.append(splat)
+
+        # ── 4. Subtract splat footprint from residuals ───────────────────────
+        lut = _gauss_lut[si]
+        y0  = _clampi(by - hw, 0, h - 1)
+        y1  = _clampi(by + hw, 0, h - 1)
+        x0  = _clampi(bx - hw, 0, w - 1)
+        x1  = _clampi(bx + hw, 0, w - 1)
+        for y in range(y0, y1 + 1):
+            dy       = y - by
+            row_base = y * w
+            for x in range(x0, x1 + 1):
+                dx  = x - bx
+                dsq = dx * dx + dy * dy
+                if dsq >= GAUSS_TABLE_MAX:
+                    continue
+                w_val = lut[dsq]
+                if w_val == 0:
+                    continue
+                off         = row_base + x
+                res_l[off] -= splat.l * w_val
+                res_a[off] -= splat.a * w_val
+                res_b[off] -= splat.b * w_val
+
+    return splats
 
 
 # ---------------------------------------------------------------------------
 # Grid helpers
 # ---------------------------------------------------------------------------
 
-def _compute_basis_map(s: _Splat, w: int, h: int) -> list[float]:
-    out    = [0.0] * (w * h)
-    rad    = int(s.sigma * w * 3.5)
-    cx     = int(s.x * w)
-    cy     = int(s.y * h)
-    y0     = _clampi(cy - rad, 0, h - 1)
-    y1     = _clampi(cy + rad, 0, h - 1)
-    x0     = _clampi(cx - rad, 0, w - 1)
-    x1     = _clampi(cx + rad, 0, w - 1)
-    two_s2 = 2 * s.sigma * s.sigma
-    for y in range(y0, y1 + 1):
-        dy = y / h - s.y
-        for x in range(x0, x1 + 1):
-            dx           = x / w - s.x
-            out[y * w + x] = math.exp(-(dx * dx + dy * dy) / two_s2)
-    return out
-
-
 def _add_splat_to_grid(grid: list[float], s: _Splat, w: int, h: int) -> None:
-    rad    = int(s.sigma * w * 3.5)
-    cx     = int(s.x * w)
-    cy     = int(s.y * h)
-    y0     = _clampi(cy - rad, 0, h - 1)
-    y1     = _clampi(cy + rad, 0, h - 1)
-    x0     = _clampi(cx - rad, 0, w - 1)
-    x1     = _clampi(cx + rad, 0, w - 1)
-    two_s2 = 2 * s.sigma * s.sigma
+    si  = _sigma_idx(s.sigma)
+    hw  = _kernel_hw[si]
+    lut = _gauss_lut[si]
+    cx  = int(s.x * w)
+    cy  = int(s.y * h)
+    y0  = _clampi(cy - hw, 0, h - 1)
+    y1  = _clampi(cy + hw, 0, h - 1)
+    x0  = _clampi(cx - hw, 0, w - 1)
+    x1  = _clampi(cx + hw, 0, w - 1)
     for y in range(y0, y1 + 1):
-        dy        = y / h - s.y
-        row_base  = y * w * 3
+        dy       = y - cy
+        row_base = y * w * 3
         for x in range(x0, x1 + 1):
-            dx    = x / w - s.x
-            w_val = math.exp(-(dx * dx + dy * dy) / two_s2)
-            idx   = row_base + x * 3
-            grid[idx] += s.l * w_val
-            if not s.is_lepton:
-                grid[idx + 1] += s.a * w_val
-                grid[idx + 2] += s.b * w_val
+            dx    = x - cx
+            dsq   = dx * dx + dy * dy
+            if dsq >= GAUSS_TABLE_MAX:
+                continue
+            w_val = lut[dsq]
+            if w_val == 0:
+                continue
+            idx          = row_base + x * 3
+            grid[idx]     += s.l * w_val
+            grid[idx + 1] += s.a * w_val
+            grid[idx + 2] += s.b * w_val
 
 
 def _image_to_oklab_grid(rgba: bytes, src_w: int, src_h: int,
                           w: int, h: int) -> list[float]:
     out = [0.0] * (w * h * 3)
     for y in range(h):
-        y0 = int(y * src_h / h)
-        y1 = math.ceil((y + 1) * src_h / h)
+        sy = (y * src_h + src_h // 2) // h
         for x in range(w):
-            x0 = int(x * src_w / w)
-            x1 = math.ceil((x + 1) * src_w / w)
-            r_sum = g_sum = b_sum = count = 0
-            for iy in range(y0, y1):
-                if iy >= src_h:
-                    break
-                for ix in range(x0, x1):
-                    if ix >= src_w:
-                        break
-                    p     = (iy * src_w + ix) * 4
-                    r_sum += rgba[p]
-                    g_sum += rgba[p + 1]
-                    b_sum += rgba[p + 2]
-                    count += 1
-            if count == 0:
-                continue
-            r = r_sum / count / 255.0
-            g = g_sum / count / 255.0
-            b = b_sum / count / 255.0
-            l, a, bb = _srgb_to_oklab(r, g, b)
+            sx = (x * src_w + src_w // 2) // w
+            p  = (sy * src_w + sx) * 4
+            r  = _srgb_lin_lut[rgba[p]]
+            g  = _srgb_lin_lut[rgba[p + 1]]
+            b  = _srgb_lin_lut[rgba[p + 2]]
+            l, a, bb     = _srgb_lin_to_oklab(r, g, b)
             idx          = (y * w + x) * 3
             out[idx]     = l
             out[idx + 1] = a
@@ -359,16 +546,13 @@ def _image_to_oklab_grid(rgba: bytes, src_w: int, src_h: int,
 # Color space
 # ---------------------------------------------------------------------------
 
-def _srgb_to_oklab(r: float, g: float, b: float):
-    def lin(c):
-        return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
-    r, g, b = lin(r), lin(g), lin(b)
+def _srgb_lin_to_oklab(r: float, g: float, b: float):
     l1 = 0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b
     m1 = 0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b
     s1 = 0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b
-    l_ = l1 ** (1/3)
-    m_ = m1 ** (1/3)
-    s_ = s1 ** (1/3)
+    l_ = _cbrt_fast(l1)
+    m_ = _cbrt_fast(m1)
+    s_ = _cbrt_fast(s1)
     return (
         0.2104542553 * l_ + 0.7936177850 * m_ - 0.0040720468 * s_,
         1.9779984951 * l_ - 2.4285922050 * m_ + 0.4505937099 * s_,
@@ -384,13 +568,7 @@ def _oklab_to_srgb(l: float, a: float, b: float):
     r  = +4.0767416621 * l3 - 3.3077115913 * m3 + 0.2309699292 * s3
     g  = -1.2684380046 * l3 + 2.6097574011 * m3 - 0.3413193965 * s3
     bl = -0.0041960863 * l3 - 0.7034186147 * m3 + 1.7076147010 * s3
-    def srt(c):
-        if c <= 0.0031308:
-            return 12.92 * c
-        if c < 0:
-            return 0.0
-        return 1.055 * (c ** (1.0 / 2.4)) - 0.055
-    return srt(r), srt(g), srt(bl)
+    return _lin_to_srgb_fast(r), _lin_to_srgb_fast(g), _lin_to_srgb_fast(bl)
 
 
 # ---------------------------------------------------------------------------
@@ -447,30 +625,37 @@ class _BitReader:
         return val
 
 
+# packV4 encodes the hash into 128 bits:
+#   Mean      : 16 bits  (6L + 5A + 5B)
+#   3 Baryons : 22 bits each = 66 bits  (x4 y4 σ2 L4 A4 B4 — full colour)
+#   3 Leptons : 15 bits each = 45 bits  (x4 y4 σ2 L5          — luma-only)
+#   Reserved  :  1 bit
+#   Total     : 128 bits
 def _pack_v4(mean: int, splats: list[_Splat]) -> bytes:
     bw = _BitWriter()
     bw.write(mean, 16)
 
-    # Baryons (3 × 22 bits)
+    # 3 Baryon splats (full-colour) — 22 bits each: x4 y4 σ2 L4 A4 B4.
     count = 0
     for s in splats:
         if s.is_lepton:
             continue
         if count >= 3:
             break
-        xi   = _clampi(int(s.x * 15.0 + 0.5), 0, 15)
-        yi   = _clampi(int(s.y * 15.0 + 0.5), 0, 15)
+        xi    = _clampi(int(s.x * 15.0 + 0.5), 0, 15)
+        yi    = _clampi(int(s.y * 15.0 + 0.5), 0, 15)
         sig_i = _sigma_idx(s.sigma)
-        l_q  = _quant(s.l, -0.8, 0.8, 4)
-        a_q  = _quant(s.a, -0.4, 0.4, 4)
-        b_q  = _quant(s.b, -0.4, 0.4, 4)
+        l_q   = _quant(s.l, -0.8, 0.8, 4)
+        a_q   = _quant(s.a, -0.4, 0.4, 4)
+        b_q   = _quant(s.b, -0.4, 0.4, 4)
         bw.write(xi, 4); bw.write(yi, 4); bw.write(sig_i, 2)
         bw.write(l_q, 4); bw.write(a_q, 4); bw.write(b_q, 4)
         count += 1
     while count < 3:
-        bw.write(0, 22); count += 1
+        bw.write(0, 22)
+        count += 1
 
-    # Leptons (3 × 15 bits)
+    # 3 Lepton splats (luma-only) — 15 bits each: x4 y4 σ2 L5.
     count = 0
     for s in splats:
         if not s.is_lepton:
@@ -481,12 +666,14 @@ def _pack_v4(mean: int, splats: list[_Splat]) -> bytes:
         yi    = _clampi(int(s.y * 15.0 + 0.5), 0, 15)
         sig_i = _sigma_idx(s.sigma)
         l_q   = _quant(s.l, -0.8, 0.8, 5)
-        bw.write(xi, 4); bw.write(yi, 4); bw.write(sig_i, 2); bw.write(l_q, 5)
+        bw.write(xi, 4); bw.write(yi, 4); bw.write(sig_i, 2)
+        bw.write(l_q, 5)
         count += 1
     while count < 3:
-        bw.write(0, 15); count += 1
+        bw.write(0, 15)
+        count += 1
 
-    bw.write(0, 1)  # padding
+    bw.write(0, 1)  # reserved
     return bw.getbytes()
 
 
@@ -496,10 +683,10 @@ def _unpack_v4(data: bytes):
     mean_l, mean_a, mean_b = _unpack_mean(packed)
     splats = []
 
-    # Baryons
+    # 3 Baryon splats — 22 bits each (x4 y4 σ2 L4 A4 B4).
     for _ in range(3):
-        xi   = br.read(4); yi  = br.read(4); sig_i = br.read(2)
-        l_q  = br.read(4); a_q = br.read(4); b_q   = br.read(4)
+        xi    = br.read(4); yi    = br.read(4); sig_i = br.read(2)
+        l_q   = br.read(4); a_q   = br.read(4); b_q   = br.read(4)
         if xi == 0 and yi == 0 and l_q == 0 and a_q == 0 and b_q == 0:
             continue
         splats.append(_Splat(
@@ -507,19 +694,20 @@ def _unpack_v4(data: bytes):
             l=_unquant(l_q, -0.8, 0.8, 4),
             a=_unquant(a_q, -0.4, 0.4, 4),
             b=_unquant(b_q, -0.4, 0.4, 4),
-            is_lepton=False
+            is_lepton=False,
         ))
 
-    # Leptons
+    # 3 Lepton splats — 15 bits each (x4 y4 σ2 L5), luma-only.
     for _ in range(3):
-        xi    = br.read(4); yi   = br.read(4); sig_i = br.read(2); l_q = br.read(5)
+        xi    = br.read(4); yi    = br.read(4); sig_i = br.read(2)
+        l_q   = br.read(5)
         if xi == 0 and yi == 0 and l_q == 0:
             continue
         splats.append(_Splat(
             x=xi / 15.0, y=yi / 15.0, sigma=SIGMA_TABLE[sig_i],
             l=_unquant(l_q, -0.8, 0.8, 5),
             a=0.0, b=0.0,
-            is_lepton=True
+            is_lepton=True,
         ))
 
     return mean_l, mean_a, mean_b, splats
@@ -552,16 +740,6 @@ def _quant(v: float, lo: float, hi: float, bits: int) -> int:
 def _unquant(v: int, lo: float, hi: float, bits: int) -> float:
     steps = (1 << bits) - 1
     return (v / steps) * (hi - lo) + lo
-
-
-def _sigma_idx(sigma: float) -> int:
-    best_i = 0
-    best_d = abs(SIGMA_TABLE[0] - sigma)
-    for i in range(1, len(SIGMA_TABLE)):
-        d = abs(SIGMA_TABLE[i] - sigma)
-        if d < best_d:
-            best_d = d; best_i = i
-    return best_i
 
 
 def _clampi(v: int, lo: int, hi: int) -> int:
