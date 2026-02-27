@@ -129,6 +129,11 @@ jobs:
         run: npm run build
         working-directory: src/ts
 
+      # Trusted publishing requires npm CLI >= 11.5.1. Node 22 ships with npm 10.x,
+      # so we upgrade explicitly before publishing.
+      - name: Upgrade npm for trusted publishing
+        run: npm install -g npm@latest
+
       # Trusted publishing: npm CLI detects OIDC automatically (id-token: write above).
       # Provenance is generated automatically — no --provenance flag needed.
       # No NODE_AUTH_TOKEN required.

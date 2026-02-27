@@ -1,6 +1,6 @@
 # SplatHash — Go
 
-Go implementation of [SplatHash](../../README.md): compress any image to 16 bytes and reconstruct it.
+Go implementation of [SplatHash](https://github.com/junevm/splathash): compress any image to 16 bytes and reconstruct it.
 
 This is the **reference implementation**. All other language implementations are tested for bit-for-bit parity against this one.
 
@@ -65,7 +65,7 @@ SplatHash fits an image into 16 bytes by:
 4. Ridge Regression to find optimal colors for all 6 splats simultaneously
 5. Bit-packing everything into 128 bits
 
-See [ALGORITHM.md](../../ALGORITHM.md) for the full technical specification.
+See [ALGORITHM.md](https://github.com/junevm/splathash/blob/main/ALGORITHM.md) for the full technical specification.
 
 ## Testing
 

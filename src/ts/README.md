@@ -1,6 +1,6 @@
 # SplatHash — TypeScript / JavaScript
 
-TypeScript implementation of [SplatHash](../../README.md): compress any image to 16 bytes and reconstruct it.
+TypeScript implementation of [SplatHash](https://github.com/junevm/splathash): compress any image to 16 bytes and reconstruct it.
 
 Works in **Node.js** and **browsers** — the library itself has zero runtime dependencies.
 
@@ -112,4 +112,4 @@ mise run test:ts
 
 ## How It Works
 
-See [ALGORITHM.md](../../ALGORITHM.md) for the full technical specification.
+See [ALGORITHM.md](https://github.com/junevm/splathash/blob/main/ALGORITHM.md) for the full technical specification.
