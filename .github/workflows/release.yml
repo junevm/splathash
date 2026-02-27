@@ -73,9 +73,6 @@ jobs:
         run: npx semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # NPM_TOKEN is needed for @semantic-release/npm to verify npm auth
-          # even when npmPublish is false.
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       # Detect whether semantic-release actually cut a new release by checking
       # for the Python dist files produced by prepareCmd.
@@ -121,7 +118,7 @@ jobs:
       # See: https://docs.npmjs.com/generating-provenance-statements
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           registry-url: "https://registry.npmjs.org"
 
       - name: Install TS dependencies
@@ -132,11 +129,12 @@ jobs:
         run: npm run build
         working-directory: src/ts
 
-      - name: Publish to npm (with provenance)
-        run: npm publish --provenance --access public
+      # Trusted publishing: npm CLI detects OIDC automatically (id-token: write above).
+      # Provenance is generated automatically — no --provenance flag needed.
+      # No NODE_AUTH_TOKEN required.
+      - name: Publish to npm (trusted publisher)
+        run: npm publish --access public
         working-directory: src/ts
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       # ── PyPI: publish via OIDC trusted publisher ─────────────────────────────
       # No PYPI_TOKEN secret required. Configure this repo as a trusted

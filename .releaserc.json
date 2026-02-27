@@ -12,14 +12,7 @@
     [
       "@semantic-release/exec",
       {
-        "prepareCmd": "sed -i 's/^version = .*/version = \"${nextRelease.version}\"/' src/py/pyproject.toml && cd src/py && python -m build"
-      }
-    ],
-    [
-      "@semantic-release/npm",
-      {
-        "pkgRoot": "src/ts",
-        "npmPublish": false
+        "prepareCmd": "npm --prefix src/ts version ${nextRelease.version} --no-git-tag-version && sed -i 's/^version = .*/version = \"${nextRelease.version}\"/' src/py/pyproject.toml && cd src/py && python -m build"
       }
     ],
     [
