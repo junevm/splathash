@@ -1,0 +1,26 @@
+[[tools.go]]
+version = "1.26.0"
+backend = "core:go"
+"platforms.linux-arm64" = { checksum = "sha256:bd03b743eb6eb4193ea3c3fd3956546bf0e3ca5b7076c8226334afe6b75704cd", url = "https://dl.google.com/go/go1.26.0.linux-arm64.tar.gz"}
+"platforms.linux-x64" = { checksum = "sha256:aac1b08a0fb0c4e0a7c1555beb7b59180b05dfc5a3d62e40e9de90cd42f88235", url = "https://dl.google.com/go/go1.26.0.linux-amd64.tar.gz"}
+"platforms.macos-arm64" = { checksum = "sha256:b1640525dfe68f066d56f200bef7bf4dce955a1a893bd061de6754c211431023", url = "https://dl.google.com/go/go1.26.0.darwin-arm64.tar.gz"}
+"platforms.macos-x64" = { checksum = "sha256:1ca28b7703cbea05a65b2a1d92d6b308610ef92f8824578a0874f2e60c9d5a22", url = "https://dl.google.com/go/go1.26.0.darwin-amd64.tar.gz"}
+"platforms.windows-x64" = { checksum = "sha256:9bbe0fc64236b2b51f6255c05c4232532b8ecc0e6d2e00950bd3021d8a4d07d4", url = "https://dl.google.com/go/go1.26.0.windows-amd64.zip"}
+
+[[tools.node]]
+version = "25.6.0"
+backend = "core:node"
+"platforms.linux-arm64" = { checksum = "sha256:2e66dabc6cb170347058132d164acca15b61503a0f998346c5134ce3072e003b", url = "https://nodejs.org/dist/v25.6.0/node-v25.6.0-linux-arm64.tar.gz"}
+"platforms.linux-x64" = { checksum = "sha256:a218fdaee14cb399f6b33925d4615a4046ba8db144f6e883c3b81e78937429eb", url = "https://nodejs.org/dist/v25.6.0/node-v25.6.0-linux-x64.tar.gz"}
+"platforms.macos-arm64" = { checksum = "sha256:5bfb537a913368152c5eba6aafe43ec834b23ee0ca4b96e5e18253937fe4103e", url = "https://nodejs.org/dist/v25.6.0/node-v25.6.0-darwin-arm64.tar.gz"}
+"platforms.macos-x64" = { checksum = "sha256:b8bb25a7fd2fa5c638aa0fa9722ba351b5393ac5ca00aceea6578164b88e7761", url = "https://nodejs.org/dist/v25.6.0/node-v25.6.0-darwin-x64.tar.gz"}
+"platforms.windows-x64" = { checksum = "sha256:133686ade5cd1e1686afcf2d688530fc35afef649ddf6a491e4705610727bd23", url = "https://nodejs.org/dist/v25.6.0/node-v25.6.0-win-x64.zip"}
+
+[[tools.python]]
+version = "3.14.3"
+backend = "core:python"
+"platforms.linux-arm64" = { checksum = "sha256:e9b0aef9baafb6b9e7a4d47b82d6d9778eeafb2c95d23fb5247d3a5f8e52c5a5", url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260211/cpython-3.14.3+20260211-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz"}
+"platforms.linux-x64" = { checksum = "sha256:759457004082459a402f369225b82565d88ca8257d9fd11c642a1c76ab0cb1cc", url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260211/cpython-3.14.3+20260211-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz"}
+"platforms.macos-arm64" = { checksum = "sha256:348647e4c13b662f7b0d218ccf472688038679815fb1a429ca664b7dce324237", url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260211/cpython-3.14.3+20260211-aarch64-apple-darwin-install_only_stripped.tar.gz"}
+"platforms.macos-x64" = { checksum = "sha256:107c71b272b5eeecd7b7b607c4fac0796b0f221bc3391e6155a349789cc7eb17", url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260211/cpython-3.14.3+20260211-x86_64-apple-darwin-install_only_stripped.tar.gz"}
+"platforms.windows-x64" = { checksum = "sha256:dc5feea0e16807e7c7b2d20af3f2c18c7153f9cbd4b54063172553fda60c5a1f", url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260211/cpython-3.14.3+20260211-x86_64-pc-windows-msvc-install_only_stripped.tar.gz"}

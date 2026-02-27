@@ -1,0 +1,159 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+# Minimum permissions for the release job.
+# The publish job declares its own finer-grained permissions.
+permissions:
+  contents: write    # push CHANGELOG.md + version commits, create tags
+  issues: write      # close issues via commit messages
+  pull-requests: write
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 1: Run semantic-release to handle versioning, changelog, and GitHub
+  # release creation. Does NOT publish to npm or PyPI directly.
+  # ─────────────────────────────────────────────────────────────────────────────
+  release:
+    name: Semantic Release
+    runs-on: ubuntu-latest
+    concurrency:
+      group: release
+      cancel-in-progress: false
+    outputs:
+      released: ${{ steps.check.outputs.released }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # A PAT ensures semantic-release's version-bump commit re-triggers CI.
+          token: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
+
+      # Go — no build artifact needed; consumers use `go get` from the git tag.
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: src/go/go.mod
+          cache-dependency-path: src/go/go.sum
+
+      # Node — needed for semantic-release toolchain and TS version bumping.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install TS dependencies
+        run: npm ci
+        working-directory: src/ts
+
+      - name: Build TypeScript
+        run: npm run build
+        working-directory: src/ts
+
+      # Python — needed to build the sdist + wheel in prepareCmd.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python build tools
+        run: pip install --quiet build
+
+      # Run semantic-release. This will:
+      #   • Bump versions in package.json and pyproject.toml
+      #   • Build the Python dist (via prepareCmd)
+      #   • Write CHANGELOG.md
+      #   • Commit version files [skip ci]
+      #   • Create a GitHub Release + tag
+      #   (npm and PyPI publishing are handled by the publish job below)
+      - name: Install release toolchain
+        run: npm ci
+
+      - name: Semantic Release
+        run: npx semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # NPM_TOKEN is needed for @semantic-release/npm to verify npm auth
+          # even when npmPublish is false.
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # Detect whether semantic-release actually cut a new release by checking
+      # for the Python dist files produced by prepareCmd.
+      - name: Check if a release was published
+        id: check
+        run: |
+          if compgen -G "src/py/dist/*.whl" > /dev/null 2>&1; then
+            echo "released=true" >> $GITHUB_OUTPUT
+          else
+            echo "released=false" >> $GITHUB_OUTPUT
+          fi
+
+      # Share the built Python dist with the publish job via artifact storage.
+      - name: Upload Python dist
+        if: steps.check.outputs.released == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-dist
+          path: src/py/dist/
+          if-no-files-found: error
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 2: Publish to npm (with provenance) and PyPI (OIDC trusted publisher).
+  # Runs only when the release job confirms a new release was published.
+  # ─────────────────────────────────────────────────────────────────────────────
+  publish:
+    name: Publish Packages
+    needs: release
+    if: needs.release.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write  # required for npm provenance attestation and PyPI OIDC
+      contents: read
+
+    steps:
+      # Check out at HEAD — semantic-release has already pushed the version-bump
+      # commit, so package.json and pyproject.toml have the correct new version.
+      - uses: actions/checkout@v4
+
+      # ── npm: publish with provenance ────────────────────────────────────────
+      # Provenance creates a signed attestation that cryptographically links
+      # this npm package to the exact source commit and CI workflow run.
+      # See: https://docs.npmjs.com/generating-provenance-statements
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install TS dependencies
+        run: npm ci
+        working-directory: src/ts
+
+      - name: Build TypeScript
+        run: npm run build
+        working-directory: src/ts
+
+      - name: Publish to npm (with provenance)
+        run: npm publish --provenance --access public
+        working-directory: src/ts
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # ── PyPI: publish via OIDC trusted publisher ─────────────────────────────
+      # No PYPI_TOKEN secret required. Configure this repo as a trusted
+      # publisher on PyPI: pypi.org → project → Manage → Publishing →
+      #   Publisher: GitHub Actions
+      #   Owner:     <your-github-org-or-user>
+      #   Repo:      splathash
+      #   Workflow:  release.yml
+      #   Environment: (leave blank)
+      # See: https://docs.pypi.org/trusted-publishers/
+      - name: Download Python dist
+        uses: actions/download-artifact@v4
+        with:
+          name: python-dist
+          path: python-dist
+
+      - name: Publish to PyPI (trusted publisher)
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: python-dist

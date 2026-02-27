@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "type": "command",
+        "bash": ".github/hooks/scripts/session-start.sh",
+        "powershell": ".github/hooks/scripts/session-start.ps1",
+        "timeout": 15
+      }
+    ],
+    "preToolUse": [
+      {
+        "type": "command",
+        "bash": ".github/hooks/scripts/pre-tool-use.sh",
+        "powershell": ".github/hooks/scripts/pre-tool-use.ps1",
+        "timeout": 5
+      }
+    ],
+    "postToolUse": [
+      {
+        "type": "command",
+        "bash": ".github/hooks/scripts/post-tool-use.sh",
+        "powershell": ".github/hooks/scripts/post-tool-use.ps1",
+        "timeout": 5
+      }
+    ],
+    "agentStop": [
+      {
+        "type": "command",
+        "bash": ".github/hooks/scripts/agent-stop.sh",
+        "powershell": ".github/hooks/scripts/agent-stop.ps1",
+        "timeout": 10
+      }
+    ]
+  }
+}

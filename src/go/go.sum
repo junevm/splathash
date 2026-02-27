@@ -1,0 +1,6 @@
+github.com/bbrks/go-blurhash v1.2.0 h1:99w0YT50b/B7uoZyM79Nqy+UemMOh8fO/ONyyxmr9MU=
+github.com/bbrks/go-blurhash v1.2.0/go.mod h1:r4N4/ViVMa2h6Ex6e1aoCWMTkykYWS/VXvYMCrbkRpw=
+go.n16f.net/thumbhash v1.1.0 h1:aBEvuAd4yiwzeQ7Sm4BZoHJYbrQ1ewjrmrRlCE79snk=
+go.n16f.net/thumbhash v1.1.0/go.mod h1:mo9pP7WtfdV9ojIamGFR/Vc0PaPA2l0CUtmYQf/SweU=
+golang.org/x/image v0.32.0 h1:6lZQWq75h7L5IWNk0r+SCpUJ6tUVd3v4ZHnbRKLkUDQ=
+golang.org/x/image v0.32.0/go.mod h1:/R37rrQmKXtO6tYXAjtDLwQgFLHmhW+V6ayXlxzP2Pc=

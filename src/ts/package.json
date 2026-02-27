@@ -1,0 +1,36 @@
+{
+  "name": "splathash",
+  "version": "1.0.0",
+  "description": "SplatHash: compress any image to 16 bytes and reconstruct it",
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
+  "exports": {
+    ".": {
+      "require": "./dist/src/index.js",
+      "types": "./dist/src/index.d.ts"
+    }
+  },
+  "files": [
+    "dist/src",
+    "README.md"
+  ],
+  "keywords": ["image", "hash", "perceptual", "thumbnail", "blurhash"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/junevm/splathash"
+  },
+  "scripts": {
+    "test": "tsc && node --test dist/test/test.js",
+    "build": "tsc",
+    "example": "ts-node examples/simple.ts"
+  },
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/sharp": "^0.31.1",
+    "sharp": "^0.34.5",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.0.0"
+  }
+}

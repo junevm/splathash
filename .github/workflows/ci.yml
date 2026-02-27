@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test-go:
+    name: Go
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: src/go/go.mod
+          cache-dependency-path: src/go/go.sum
+
+      - name: Test
+        run: go test ./...
+        working-directory: src/go
+
+  test-ts:
+    name: TypeScript
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: src/ts/package-lock.json
+
+      - name: Install
+        run: npm ci
+        working-directory: src/ts
+
+      - name: Test
+        run: npm test
+        working-directory: src/ts
+
+  test-py:
+    name: Python
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: pip install -e ".[dev]"
+        working-directory: src/py
+
+      - name: Test
+        run: python -m pytest test_splathash.py -v
+        working-directory: src/py

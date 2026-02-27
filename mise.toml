@@ -1,0 +1,65 @@
+[tools]
+go = "latest"
+node = "latest"
+python = "latest"
+
+[env]
+DO_NOT_TRACK = "1"
+
+[settings]
+experimental = true
+lockfile = true
+
+[hooks]
+postinstall = ["mise lock"]
+
+# ---------------------------------------------------------------------------
+# Tasks
+# ---------------------------------------------------------------------------
+
+[tasks.test]
+description = "Run all implementation tests"
+depends = ["test:go", "test:ts", "test:py"]
+
+[tasks."test:go"]
+description = "Run Go tests"
+run = "go test ./..."
+dir = "src/go"
+
+[tasks."test:ts"]
+description = "Run TypeScript tests"
+run = ["npm install --silent", "npm test"]
+dir = "src/ts"
+
+[tasks."test:py"]
+description = "Run Python tests"
+run = ["pip install -q Pillow pytest", "python -m pytest test_splathash.py -v"]
+dir = "src/py"
+
+[tasks.bench]
+description = "Run Go benchmarks"
+run = "go test -bench=. -benchmem ./..."
+dir = "src/go"
+
+[tasks.compare]
+description = "Generate visual comparisons: HTML in src/go/ and PNG in docs/"
+run = [
+  "go test -v -run TestGenerateVisualComparison ./...",
+  "go run cmd/preview/main.go",
+]
+dir = "src/go"
+
+[tasks."example:go"]
+description = "Run Go example"
+run = "go run examples/simple/main.go"
+dir = "src/go"
+
+[tasks."example:ts"]
+description = "Run TypeScript example"
+run = ["npm install --silent", "npm run example"]
+dir = "src/ts"
+
+[tasks."example:py"]
+description = "Run Python example"
+run = ["pip install -q Pillow", "python example.py"]
+dir = "src/py"
