@@ -36,18 +36,18 @@ The image below shows SplatHash, ThumbHash, and BlurHash reconstructions side by
 
 ![Visual comparison of SplatHash, ThumbHash, and BlurHash reconstructions](./docs/comparison.png)
 
-*Columns: original (downscaled), SplatHash decode (32×32), ThumbHash decode, BlurHash decode. Regenerate with `mise run compare`.*
+_Columns: original (downscaled), SplatHash decode (32×32), ThumbHash decode, BlurHash decode. Regenerate with `mise run compare`._
 
 ## Implementations
 
 SplatHash has a **reference implementation in Go** and **ports** for TypeScript (Node and browser) and Python. All implementations are tested against the same image assets and produce identical hashes.
 
-| Language                 | Location    | Status    | Notes                                |
-| :----------------------- | :---------- | :-------- | :----------------------------------- |
-| **Go**                   | `src/go/`   | Reference | Defines correct behavior             |
-| **TypeScript (Node)**    | `src/ts/`   | Port      | Isomorphic, also runs in browsers    |
-| **TypeScript (Browser)** | `src/ts/`   | Port      | Same package, no extra config needed |
-| **Python**               | `src/py/`   | Port      | Requires Pillow                      |
+| Language                 | Location  | Status    | Notes                                |
+| :----------------------- | :-------- | :-------- | :----------------------------------- |
+| **Go**                   | `src/go/` | Reference | Defines correct behavior             |
+| **TypeScript (Node)**    | `src/ts/` | Port      | Isomorphic, also runs in browsers    |
+| **TypeScript (Browser)** | `src/ts/` | Port      | Same package, no extra config needed |
+| **Python**               | `src/py/` | Port      | Requires Pillow                      |
 
 ## Installation
 
@@ -86,6 +86,7 @@ const result = decode(hash);
 See [`src/ts/README.md`](./src/ts/README.md) and `src/ts/examples/simple.ts` for full examples using `sharp`.
 
 ### TypeScript / Browser
+
 Same package. Pass raw RGBA data from a `<canvas>` context:
 
 ```typescript
