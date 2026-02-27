@@ -52,6 +52,7 @@ See [`example.py`](example.py) for a full working example that encodes a directo
 Encodes an image to a 16-byte SplatHash.
 
 `source` can be:
+
 - A file path (`str` or `Path`)
 - A file-like object (binary mode)
 - A `PIL.Image.Image`

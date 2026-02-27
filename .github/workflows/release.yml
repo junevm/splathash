@@ -7,8 +7,8 @@ on:
 # Minimum permissions for the release job.
 # The publish job declares its own finer-grained permissions.
 permissions:
-  contents: write    # push CHANGELOG.md + version commits, create tags
-  issues: write      # close issues via commit messages
+  contents: write # push CHANGELOG.md + version commits, create tags
+  issues: write # close issues via commit messages
   pull-requests: write
 
 jobs:
@@ -104,7 +104,7 @@ jobs:
     if: needs.release.outputs.released == 'true'
     runs-on: ubuntu-latest
     permissions:
-      id-token: write  # required for npm provenance attestation and PyPI OIDC
+      id-token: write # required for npm provenance attestation and PyPI OIDC
       contents: read
 
     steps:
