@@ -3,7 +3,7 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "splathash"
+name = "splathash-py"
 version = "1.0.0"
 description = "SplatHash: compress any image to 16 bytes and reconstruct it"
 readme = "README.md"

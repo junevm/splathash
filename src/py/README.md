@@ -10,7 +10,7 @@ Python implementation of [SplatHash](../../README.md): compress any image to 16 
 ## Installation
 
 ```bash
-pip install splathash
+pip install splathash-py
 ```
 
 For local development from the repo:
