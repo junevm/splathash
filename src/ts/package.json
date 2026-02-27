@@ -14,7 +14,13 @@
     "dist/src",
     "README.md"
   ],
-  "keywords": ["image", "hash", "perceptual", "thumbnail", "blurhash"],
+  "keywords": [
+    "image",
+    "hash",
+    "perceptual",
+    "thumbnail",
+    "blurhash"
+  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/junevm/splathash"
