@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/junevm/splathash/compare/v1.1.0...v1.2.0) (2026-02-28)
+
+
+### Features
+
+* **release:** add check for already published npm version before publishing ([9fd68f5](https://github.com/junevm/splathash/commit/9fd68f5e90b4b830fe7dba2bd42c50384f4e6a4a))
+
 # [1.1.0](https://github.com/junevm/splathash/compare/v1.0.3...v1.1.0) (2026-02-28)
 
 
