@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SplatHash - compress any image to 16 bytes</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <main>
+      <header class="hero">
+        <h1 class="title">SplatHash</h1>
+        <p class="tagline">compress any image to 16 bytes — and reconstruct it</p>
+        <div class="links">
+          <a href="https://github.com/junevm/splathash" target="_blank">GitHub Repository</a> &bull;
+          <a href="https://github.com/junevm/splathash/blob/main/ALGORITHM.md" target="_blank">Algorithm</a>
+        </div>
+      </header>
+
+      <section class="playground">
+        <h2>Interactive Demo</h2>
+        <p class="section-desc">Try it yourself. Upload any image to encode and decode it instantly.</p>
+        
+        <div class="upload-container">
+          <input type="file" id="imageInput" accept="image/*" />
+        </div>
+
+        <div id="splathash-demo" class="splathash-demo" style="display: none;">
+          <div class="demo-display">
+            <div class="demo-image-box">
+              <h3>Original</h3>
+              <canvas id="demo-original"></canvas>
+            </div>
+            <div class="demo-arrow">&rarr;</div>
+            <div class="demo-hash-box">
+              <h3>16-byte Hash</h3>
+              <div class="hex-string" id="demo-hash">-</div>
+              <div class="perf-stats">
+                <span>Encode: <strong id="demo-enc">-</strong></span>
+                <span>Decode: <strong class="badge" id="demo-dec">-</strong></span>
+              </div>
+            </div>
+            <div class="demo-arrow">&rarr;</div>
+            <div class="demo-image-box">
+              <h3>SplatHash Preview</h3>
+              <canvas id="demo-splat"></canvas>
+              <div class="dims">32×32</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="comparison-section">
+        <h2>Visual Comparison</h2>
+        <p class="section-desc">Compare SplatHash against other popular image hashing algorithms.</p>
+        
+        <div class="table-container">
+          <table id="comparison-table">
+            <thead>
+              <tr>
+                <th class="col-algo">Algorithm</th>
+                <th class="col-preview">Preview</th>
+                <th class="col-hash">Hash String</th>
+                <th class="col-size" style="text-align: right;">Size</th>
+                <th class="col-enc" style="text-align: right;">Encode Time</th>
+                <th class="col-dec" style="text-align: right;">Decode Time</th>
+              </tr>
+            </thead>
+            <tbody>
+              <!-- Data will be populated here -->
+              <tr>
+                <td colspan="6" class="waiting-text" id="tbl-placeholder" style="text-align: center; padding: 40px; color: #666;">
+                  Upload an image above to see the comparison
+                </td>
+              </tr>
+            </tbody>
+            <tbody id="tbl-data" style="display: none;">
+              <tr>
+                <td><strong>Original</strong></td>
+                <td><canvas id="tbl-orig-img" width="32" height="32"></canvas></td>
+                <td class="hash-cell muted">-</td>
+                <td style="text-align: right;" id="tbl-orig-size">-</td>
+                <td style="text-align: right;" class="muted">-</td>
+                <td style="text-align: right;" class="muted">-</td>
+              </tr>
+              <tr class="highlight-row">
+                <td><strong>SplatHash</strong></td>
+                <td><canvas id="tbl-splat-img" width="32" height="32"></canvas></td>
+                <td class="hash-cell"><code class="full-hash" id="tbl-splat-hash">-</code></td>
+                <td style="text-align: right;" id="tbl-splat-size">16 bytes</td>
+                <td style="text-align: right;" id="tbl-splat-enc">-</td>
+                <td style="text-align: right;" id="tbl-splat-dec" class="win">-</td>
+              </tr>
+              <tr>
+                <td><strong>ThumbHash</strong></td>
+                <td><canvas id="tbl-thumb-img" width="32" height="32"></canvas></td>
+                <td class="hash-cell"><code class="full-hash" id="tbl-thumb-hash">-</code></td>
+                <td style="text-align: right;" id="tbl-thumb-size">-</td>
+                <td style="text-align: right;" id="tbl-thumb-enc">-</td>
+                <td style="text-align: right;" id="tbl-thumb-dec">-</td>
+              </tr>
+              <tr>
+                <td><strong>BlurHash</strong></td>
+                <td><canvas id="tbl-blur-img" width="32" height="32"></canvas></td>
+                <td class="hash-cell"><code class="full-hash" id="tbl-blur-hash">-</code></td>
+                <td style="text-align: right;" id="tbl-blur-size">-</td>
+                <td style="text-align: right;" id="tbl-blur-enc">-</td>
+                <td style="text-align: right;" id="tbl-blur-dec">-</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="marketing">
+        <div class="marketing-grid">
+          <div class="marketing-col">
+            <h2>Why SplatHash?</h2>
+            <ul class="features-list">
+              <li><strong>Fixed 16 bytes.</strong> BlurHash and ThumbHash output 25–35 bytes minimum. SplatHash is always 16 bytes — storable as a single 128-bit integer, no variable-length overhead.</li>
+              <li><strong>Localized blobs.</strong> BlurHash and ThumbHash use cosine basis functions that are global — a feature in one corner pollutes the entire representation. SplatHash uses Gaussian blobs that are spatially bounded.</li>
+              <li><strong>Global color optimization.</strong> After finding splat positions greedily, SplatHash runs Ridge Regression across all six splats simultaneously to find the best possible color weights. No other 16-byte algorithm does this.</li>
+              <li><strong>Perceptually uniform.</strong> All computation happens in Oklab, where equal numerical differences equal equal perceived differences.</li>
+              <li><strong>Cross-language identical.</strong> Go, TypeScript, and Python produce bit-for-bit identical hashes for the same input.</li>
+            </ul>
+          </div>
+
+          <div class="marketing-col benchmarks">
+            <h2>Benchmarks</h2>
+            <p>Measured on a real photo using Go's built-in benchmark tool.</p>
+            <table class="bench-table">
+              <thead>
+                <tr>
+                  <th>Algorithm</th>
+                  <th style="text-align: right;">Encode Time</th>
+                  <th style="text-align: right;">Decode Time</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="highlight-row">
+                  <td><strong>SplatHash</strong></td>
+                  <td style="text-align: right;">3.53 ms</td>
+                  <td style="text-align: right;" class="win">0.067 ms</td>
+                </tr>
+                <tr>
+                  <td><strong>ThumbHash</strong></td>
+                  <td style="text-align: right;">0.86 ms</td>
+                  <td style="text-align: right;">0.50 ms</td>
+                </tr>
+                <tr>
+                  <td><strong>BlurHash</strong></td>
+                  <td style="text-align: right;">445.0 ms</td>
+                  <td style="text-align: right;">6.55 ms</td>
+                </tr>
+              </tbody>
+            </table>
+            <p class="benchmark-note">
+              <strong>Decode is where SplatHash dominates.</strong> At 0.067 ms it is 7× faster than ThumbHash and 97× faster than BlurHash. Decode runs on every page load for every user — this is the number that matters in production.
+            </p>
+          </div>
+        </div>
+
+        <div class="get-started">
+          <h2>Get Started &rarr;</h2>
+          <div class="start-links">
+            <a href="https://github.com/junevm/splathash/tree/main/src/go" target="_blank" class="btn">Go</a>
+            <a href="https://github.com/junevm/splathash/tree/main/src/ts" target="_blank" class="btn">TypeScript</a>
+            <a href="https://github.com/junevm/splathash/tree/main/src/py" target="_blank" class="btn">Python</a>
+          </div>
+        </div>
+      </section>
+
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
