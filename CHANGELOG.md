@@ -1,3 +1,10 @@
+## [1.2.1](https://github.com/junevm/splathash/compare/v1.2.0...v1.2.1) (2026-02-28)
+
+
+### Bug Fixes
+
+* dummy commit for ci tests ([5ee19e7](https://github.com/junevm/splathash/commit/5ee19e768df2410076b0b81b817ef1b019ff2582))
+
 # [1.2.0](https://github.com/junevm/splathash/compare/v1.1.0...v1.2.0) (2026-02-28)
 
 
