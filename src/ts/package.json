@@ -2,16 +2,26 @@
   "name": "splathash-ts",
   "version": "1.2.2",
   "description": "SplatHash: compress any image to 16 bytes and reconstruct it",
-  "main": "dist/src/index.js",
-  "types": "dist/src/index.d.ts",
+  "main": "dist/index.cjs",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.cts",
   "exports": {
     ".": {
-      "require": "./dist/src/index.js",
-      "types": "./dist/src/index.d.ts"
+      "import": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
     }
   },
   "files": [
-    "dist/src",
+    "dist/index.cjs",
+    "dist/index.mjs",
+    "dist/index.d.cts",
+    "dist/index.d.mts",
     "README.md"
   ],
   "keywords": [
@@ -27,7 +37,7 @@
   },
   "scripts": {
     "test": "tsc && node --test dist/test/test.js",
-    "build": "tsc",
+    "build": "tsdown",
     "example": "ts-node examples/simple.ts"
   },
   "author": "",
@@ -37,6 +47,7 @@
     "@types/sharp": "^0.31.1",
     "sharp": "^0.34.5",
     "ts-node": "^10.9.2",
+    "tsdown": "^0.21.0-beta.2",
     "typescript": "^5.0.0"
   }
 }
