@@ -53,16 +53,16 @@ BenchmarkDecodeBlurHash-8       171      6553100 ns/op   547552 B/op    5 allocs
 
 ## Comparison
 
-|                                 |      SplatHash      |  ThumbHash  |  BlurHash   |
-| :------------------------------ | :-----------------: | :---------: | :---------: |
-| Fixed size                      |     ✅ 16 bytes     | ❌ variable | ❌ variable |
-| Storable as 128-bit int         |         ✅          |     ❌      |     ❌      |
-| Perceptual color space (Oklab)  |         ✅          |     ❌      |     ❌      |
-| Spatially localized basis       |    ✅ Gaussians     |  ❌ global  |  ❌ global  |
-| Global weight optimization      | ✅ Ridge Regression |     ❌      |     ❌      |
-| Alpha channel                   |         ✅          |     ✅      |     ❌      |
-| Bit-exact cross-language parity |         ✅          |     ❌      |     ❌      |
-| Configurable quality vs size    |         ❌          |     ❌      |     ✅      |
+| Feature                         | SplatHash       | ThumbHash | BlurHash |
+| ------------------------------- | --------------- | --------- | -------- |
+| Fixed output size               | Yes (16 bytes)  | No        | No       |
+| Storable as 128-bit integer     | Yes             | No        | No       |
+| Perceptual color space (Oklab)  | Yes             | No        | No       |
+| Spatially localized basis       | Yes (Gaussians) | No        | No       |
+| Global weight optimization      | Yes (Ridge)     | No        | No       |
+| Alpha channel support           | Yes             | Yes       | No       |
+| Bit-exact cross-language parity | Yes             | No        | No       |
+| Configurable quality vs. size   | No              | No        | Yes      |
 
 ## How It Works
 
