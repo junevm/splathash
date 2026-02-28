@@ -1,3 +1,10 @@
+# [1.3.0](https://github.com/junevm/splathash/compare/v1.2.2...v1.3.0) (2026-02-28)
+
+
+### Features
+
+* **tsdown:** add tsdown configuration for building TypeScript files ([01f4bd0](https://github.com/junevm/splathash/commit/01f4bd0143639a2eba44b7e7912b4f1be13aae2f))
+
 ## [1.2.2](https://github.com/junevm/splathash/compare/v1.2.1...v1.2.2) (2026-02-28)
 
 
