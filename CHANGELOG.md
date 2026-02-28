@@ -1,3 +1,10 @@
+## [1.2.2](https://github.com/junevm/splathash/compare/v1.2.1...v1.2.2) (2026-02-28)
+
+
+### Bug Fixes
+
+* **release:** update checkout step to fetch latest commit for version bump ([4f492a7](https://github.com/junevm/splathash/commit/4f492a77d2e4c81983a575a7b9a021df81002743))
+
 ## [1.2.1](https://github.com/junevm/splathash/compare/v1.2.0...v1.2.1) (2026-02-28)
 
 
