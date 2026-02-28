@@ -134,10 +134,20 @@ jobs:
       - name: Upgrade npm for trusted publishing
         run: npm install -g npm@latest
 
+      - name: Check if npm version is already published
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if npm view splathash-ts@$VERSION version 2>/dev/null; then
+            echo "Version $VERSION is already published. Skipping npm publish."
+            echo "SKIP_NPM=true" >> $GITHUB_ENV
+          fi
+        working-directory: src/ts
+
       # Trusted publishing: npm CLI detects OIDC automatically (id-token: write above).
       # Provenance is generated automatically — no --provenance flag needed.
       # No NODE_AUTH_TOKEN required.
       - name: Publish to npm (trusted publisher)
+        if: env.SKIP_NPM != 'true'
         run: npm publish --access public
         working-directory: src/ts
 
