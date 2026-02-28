@@ -108,9 +108,14 @@ jobs:
       contents: read
 
     steps:
-      # Check out at HEAD — semantic-release has already pushed the version-bump
-      # commit, so package.json and pyproject.toml have the correct new version.
+      # Check out the branch HEAD, not the triggering SHA. semantic-release
+      # pushed a version-bump commit ([skip ci]) after the workflow started, so
+      # GITHUB_SHA still points at the old commit. Using ref: github.ref fetches
+      # the latest commit on the branch, which has the correct new version in
+      # both package.json and pyproject.toml.
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
 
       # ── npm: publish with provenance ────────────────────────────────────────
       # Provenance creates a signed attestation that cryptographically links
