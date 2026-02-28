@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/junevm/splathash/compare/v1.0.3...v1.1.0) (2026-02-28)
+
+
+### Features
+
+* implement redesigned splathash landing page matching requirements ([aaf591a](https://github.com/junevm/splathash/commit/aaf591a9cc7a40a065bd0cf6a48596f938ad7fca))
+
 ## [1.0.3](https://github.com/junevm/splathash/compare/v1.0.2...v1.0.3) (2026-02-27)
 
 
