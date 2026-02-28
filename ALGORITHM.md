@@ -1,9 +1,5 @@
 # SplatHash Algorithm
 
-This document explains the SplatHash V4 algorithm from first principles. No math background is assumed. The goal is to explain _why_ every step exists and _what it actually does_, not just _how_ to implement it.
-
----
-
 ## The Core Problem
 
 You have an image. Maybe it's a 4K photo. You want to show a blurry placeholder while the real image loads — something that captures the color and general look of the image, but fits in 16 bytes. That's the problem SplatHash solves.
@@ -218,9 +214,9 @@ The result is a 32x32 image suitable for use as a placeholder.
 
 **ThumbHash** improves on BlurHash by using a similar frequency decomposition but with better color handling. Output is variable-length and typically 25–35 bytes. Its reconstruction is perceptually better than BlurHash but still global in nature.
 
-**SplatHash** uses spatially localized basis functions (Gaussians). A Splat affects only its local neighborhood. This means a bright spot in one corner doesn't corrupt the representation of the opposite corner. The global Ridge Regression step then ensures the Splats work together optimally. The result is 16 bytes fixed — smaller than both alternatives — while retaining competitive or superior visual quality for images with distinct local features.
+**SplatHash** uses spatially localized basis functions (Gaussians). A Splat affects only its local neighborhood. This means a bright spot in one corner doesn't corrupt the representation of the opposite corner. The global Ridge Regression step then ensures the Splats work together optimally. The result is 16 bytes fixed — represented as a 22-char base64url string — smaller than both alternatives in bytes and shorter than any BlurHash or ThumbHash string.
 
-The fixed 16-byte output is also a practical advantage: it can be stored in a database column with no variable-length overhead, passed as a single 128-bit integer, and compared cheaply.
+The fixed 16-byte output is also a practical advantage: it can be stored in a database column with no variable-length overhead, passed as a single 128-bit integer, and compared cheaply. As a string it encodes to 22 base64url characters (no padding) — shorter than any BlurHash or ThumbHash string.
 
 ---
 
@@ -242,4 +238,4 @@ When porting to a new language, the following must be exact:
 
 7. **Sigma lookup**: When encoding, find the nearest sigma table entry by absolute distance and use its index.
 
-Test your implementation against the shared `assets/` test images by comparing hex-encoded hashes with the Go reference implementation.
+Test your implementation against the shared `assets/` test images by comparing raw bytes (or hex-encoded hashes) with the Go reference implementation. The canonical string format for human-readable transmission is base64url without padding (22 chars for 16 bytes).

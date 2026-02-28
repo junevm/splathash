@@ -7,7 +7,7 @@ Works in **Node.js** and **browsers** — the library itself has zero runtime de
 ## Installation
 
 ```bash
-npm install splathash
+npm install splathash-ts
 ```
 
 ## Usage
@@ -18,7 +18,7 @@ The library works on raw RGBA bytes. Use any image-loading library (e.g. `sharp`
 
 ```typescript
 import sharp from "sharp";
-import { encode, decode } from "splathash";
+import { encode, decode } from "splathash-ts";
 
 const { data, info } = await sharp("photo.jpg")
   .ensureAlpha()
@@ -41,7 +41,7 @@ const result = decode(hash);
 Same package, same API. Get raw RGBA from a `<canvas>`:
 
 ```typescript
-import { encode, decode } from "splathash";
+import { encode, decode } from "splathash-ts";
 
 const canvas = document.getElementById("myCanvas") as HTMLCanvasElement;
 const ctx = canvas.getContext("2d")!;

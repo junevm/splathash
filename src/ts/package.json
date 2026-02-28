@@ -1,5 +1,5 @@
 {
-  "name": "splathash",
+  "name": "splathash-ts",
   "version": "1.0.3",
   "description": "SplatHash: compress any image to 16 bytes and reconstruct it",
   "main": "dist/src/index.js",
